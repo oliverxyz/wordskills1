@@ -1,0 +1,115 @@
+2.1 Классификация методом случайного леса
+
+# Импорт библиотек
+from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import RandomForestClassifier
+
+# Решетчатый поиск подходящих для модели гиперпараметров
+param_grid = [
+    {'max_depth' : [i for i in range(1, 11)]},
+    {'n_estimators' : [i for i in range(1, 11)]}
+]
+
+random_forest_search = RandomForestClassifier()
+grid_search = GridSearchCV(random_forest_search, param_grid, n_jobs = -1)
+grid_search.fit(feature_train, target_train)
+print("Лучшая модель: ", grid_search.best_estimator_)
+
+# Создание модели классификатора методом случайного леса
+model_1 = grid_search.best_estimator_.fit(feature_train, target_train)
+
+# проверка
+print("Ошибка на обучающей выборке: ", model_1.score(feature_train, target_train))
+print("Ошибка на тестовой выборке: ", model_1.score(feature_test, target_test))
+
+# построим матрицу неточностей для более полного представления о результатах работы модели
+model_1_pred = model_1.predict(feature_test)
+report = classification_report(target_test, model_1_pred, output_dict=True)
+report_rf = pd.DataFrame(report).transpose()
+report_rf
+
+2.2 Классификация с помощью методов опорных векторов
+
+# Импорт библиотек
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.svm import LinearSVC, SVC
+from sklearn.preprocessing import StandardScaler
+
+%%time
+# Создаём конвейеры следующим образом: задаём модель, добавляем шкалировщик для стандартизации данных, чтобы исключить случайные
+# шумы в данных и защитить алгоритм от выбросов.
+
+# линейная модель опорных векторов
+linear_svm_clf = Pipeline([
+    ('scaler', StandardScaler()),
+    ('linear_svc', LinearSVC(C = 1, loss = 'hinge'))
+])
+
+linear_svm_clf.fit(feature_train, target_train)
+
+# проверка
+print("Ошибка на обучающей выборке: ", linear_svm_clf.score(feature_train, target_train))
+print("Ошибка на тестовой выборке: ", linear_svm_clf.score(feature_test, target_test))
+
+# построим матрицу неточностей для более полного представления о результатах работы модели
+model_2_pred = linear_svm_clf.predict(feature_test)
+report = classification_report(target_test, model_2_pred, output_dict=True)
+report_lsvm = pd.DataFrame(report).transpose()
+report_lsvm
+
+# импорт конструктора
+from sklearn.linear_model import LogisticRegression
+
+ реализуем модель полиномиальной логистической регрессии, так как перед нами задача мультиклассификации
+log_regression = LogisticRegression(multi_class = 'multinomial', solver = 'lbfgs')
+param_grid_lr = [
+    {'C' : [0.01, 0.1, 1, 10]},
+]
+
+grid_search_lr = GridSearchCV(log_regression, param_grid_lr)
+grid_search_lr.fit(feature_train, target_train)
+
+grid_search_lr.best_estimator_
+
+logistic_regression = Pipeline([
+    ('scaler', StandardScaler()), # стандартизируем данные, так как алгорит чувствителен к масштабу данных
+    ('logit_reg', grid_search_lr.best_estimator_) # используем объект с оптимальными подобранными характеристиками
+])
+
+model_3 = logistic_regression.fit(feature_train, target_train)
+
+# проверка
+print("Ошибка на обучающей выборке: ", model_3.score(feature_train, target_train))
+print("Ошибка на тестовой выборке: ", model_3.score(feature_test, target_test))
+
+# построим матрицу неточностей для более полного представления о результатах работы модели
+model_3_pred = logistic_regression.predict(feature_test)
+report = classification_report(target_test, model_3_pred, output_dict = True)
+report_log_reg = pd.DataFrame(report).transpose()
+report_log_reg
+
+2.4 Ансамблевые методы с голосованием
+
+# импорт конструкторов
+from sklearn.ensemble import VotingClassifier
+
+%%time
+# Создаём модель ансамблевого классификатора с жёстким голосованием.
+# Для этого создадим три новых классификатора, но с подобранными ранее параметрами.
+# Это делается для того, чтобы новые классификаторы не были обучены ранее на предоставляемых им данных
+voiting_clf = VotingClassifier(estimators = [('lr', LogisticRegression(multi_class = 'multinomial', solver = 'lbfgs', C = 10)), 
+                                             ('rf', RandomForestClassifier(n_estimators = 10)), 
+                                             ('lsvm', LinearSVC())], voting = 'hard')
+
+model_4 = voiting_clf.fit(feature_train, target_train)
+
+# проверка
+print("Ошибка на обучающей выборке: ", model_4.score(feature_train, target_train))
+print("Ошибка на тестовой выборке: ", model_4.score(feature_test, target_test))
+
+# построим матрицу неточностей для более полного представления о результатах работы модели
+model_4_pred = model_4.predict(feature_test)
+report = classification_report(target_test, model_4_pred, output_dict = True)
+report_vclf = pd.DataFrame(report).transpose()
+report_vclf
